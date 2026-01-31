@@ -295,7 +295,7 @@ export function Play() {
                   <p>Win: 1:1</p>
                   <p>Push: Bet returned</p>
                   <p>Insurance: 2:1</p>
-                  <p>Surrender: Lose half</p>
+                  <p>Surrender: Lose half</p>                  <p>Dealer stands on soft 17 (S17)</p>
                 </div>
               </div>
             </div>

@@ -574,3 +574,178 @@ body {
 .hand-result--push {
   color: #c8c8c8;
 }
+.training-page {
+  animation: fade-in 0.4s ease;
+}
+
+.training-list {
+  margin-top: 16px;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.training-card {
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(13, 27, 31, 0.6);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.training-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.training-card__title {
+  font-weight: 700;
+  font-size: 16px;
+  margin-bottom: 6px;
+}
+
+.training-card__desc {
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.spam-count {
+  margin-top: 16px;
+  display: grid;
+  gap: 16px;
+  --card-width: 84px;
+  --card-height: 120px;
+}
+
+.spam-count__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.spam-count__title {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.spam-count__hint {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.spam-count__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.spam-count__actions button,
+.spam-count__range button,
+.spam-count__prompt button {
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid #2a4f56;
+  background: #162f35;
+  color: var(--ink);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.spam-count__actions button:hover,
+.spam-count__range button:hover,
+.spam-count__prompt button:hover {
+  border-color: var(--accent);
+}
+
+.spam-count__range {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.spam-count__range button.active {
+  border-color: var(--accent);
+  background: #1c3a40;
+}
+
+.spam-count__cards {
+  min-height: calc(var(--card-height) + 24px);
+  border-radius: 12px;
+  border: 1px dashed #2a4f56;
+  padding: 12px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 15, 18, 0.35);
+  cursor: pointer;
+}
+
+.spam-count__cards--locked {
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+
+.spam-count__empty {
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+.spam-count__prompt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.spam-count__prompt input {
+  width: 120px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #2a4f56;
+  background: rgba(8, 15, 18, 0.6);
+  color: var(--ink);
+}
+
+.spam-count__feedback {
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid #2a4f56;
+  background: rgba(8, 15, 18, 0.5);
+}
+
+.spam-count__feedback--ok {
+  color: #7cc7b1;
+  border-color: rgba(124, 199, 177, 0.6);
+}
+
+.spam-count__feedback--bad {
+  color: #d64545;
+  border-color: rgba(214, 69, 69, 0.6);
+}
+.spam-count__board {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.spam-count__deal {
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: 1px solid #2a4f56;
+  background: #162f35;
+  color: var(--ink);
+  font-weight: 700;
+  cursor: pointer;
+  min-width: 110px;
+}
+
+.spam-count__deal:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
