@@ -40,6 +40,22 @@ export interface Hand {
   splitFromAce: boolean;
 }
 
+export interface Seat {
+  seatIndex: number;
+  bankroll: number;
+  pendingBet: number;
+  ready: boolean;
+  hands: Hand[];
+  activeHandIndex: number;
+  insuranceBet: number;
+  insuranceOffered: boolean;
+  skippedRound: boolean;
+}
+
+export type DealTarget =
+  | { type: "SEAT"; seatIndex: number }
+  | { type: "DEALER" };
+
 export interface Rules {
   decks: number;
   dealerStandsOnSoft17: boolean;
@@ -58,6 +74,7 @@ export interface Rules {
 
 export interface HandResult {
   handIndex: number;
+  seatIndex: number;
   outcome: Outcome;
   payout: number;
   playerTotal: number;
@@ -69,21 +86,18 @@ export interface RoundResult {
   dealerTotal: number;
   dealerBust: boolean;
   dealerBlackjack: boolean;
-  insuranceBet: number;
-  insurancePayout: number;
+  insurance: { seatIndex: number; bet: number; payout: number }[];
 }
 
 export interface RoundState {
   phase: Phase;
   shoe: Card[];
   discard: Card[];
-  playerHands: Hand[];
-  activeHandIndex: number;
+  seats: Seat[];
+  activeSeatIndex: number;
   dealerHand: Hand;
-  bankroll: number;
-  pendingBet: number;
-  insuranceBet: number;
-  insuranceOffered: boolean;
+  dealQueue: DealTarget[];
+  roundSeatOrder: number[];
   runningCount: number;
   rules: Rules;
   roundId: number;

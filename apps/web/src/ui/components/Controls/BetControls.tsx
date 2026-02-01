@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 
 type BetControlsProps = {
   bet: number;
@@ -16,8 +16,7 @@ type RepeatState = {
 };
 
 const REPEAT_START_DELAY = 320;
-const REPEAT_MIN_DELAY = 60;
-const REPEAT_ACCEL = 0.82;
+const REPEAT_ACCEL = 0.85;
 
 export function BetControls({
   bet,
@@ -56,10 +55,7 @@ export function BetControls({
 
   const tickRepeat = () => {
     applyDelta(repeatRef.current.delta);
-    repeatRef.current.delay = Math.max(
-      REPEAT_MIN_DELAY,
-      Math.floor(repeatRef.current.delay * REPEAT_ACCEL)
-    );
+    repeatRef.current.delay = Math.max(0, Math.floor(repeatRef.current.delay * REPEAT_ACCEL));
     repeatRef.current.timerId = window.setTimeout(tickRepeat, repeatRef.current.delay);
   };
 

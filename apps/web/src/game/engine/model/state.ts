@@ -1,10 +1,11 @@
-﻿import type { Card, Hand, RoundState, Rules } from "./types";
+import type { Card, Hand, RoundState, Rules, Seat } from "./types";
 import { DEFAULT_RULES } from "../rules/blackjackRules";
 import { createShoe, shuffle } from "./deck";
 import { mulberry32 } from "./rng";
 
 export type InitOptions = {
   bankroll?: number;
+  seatCount?: number;
   rules?: Partial<Rules>;
   seed?: number;
   shoe?: Card[];
@@ -30,17 +31,29 @@ export function createInitialState(options: InitOptions = {}): RoundState {
     shoe = shuffle(shoe, mulberry32(seed));
   }
 
+  const seatCount = options.seatCount ?? 1;
+  const bankroll = options.bankroll ?? 1000;
+  const seats: Seat[] = Array.from({ length: seatCount }).map((_, index) => ({
+    seatIndex: index,
+    bankroll,
+    pendingBet: 0,
+    ready: false,
+    hands: [],
+    activeHandIndex: 0,
+    insuranceBet: 0,
+    insuranceOffered: false,
+    skippedRound: false
+  }));
+
   return {
     phase: "BETTING",
     shoe,
     discard: [],
-    playerHands: [],
-    activeHandIndex: 0,
+    seats,
+    activeSeatIndex: 0,
     dealerHand: createEmptyHand(0),
-    bankroll: options.bankroll ?? 1000,
-    pendingBet: 0,
-    insuranceBet: 0,
-    insuranceOffered: false,
+    dealQueue: [],
+    roundSeatOrder: [],
     runningCount: 0,
     rules,
     roundId: 1

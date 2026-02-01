@@ -29,7 +29,9 @@ const RANGES: RangeOption[] = [
 
 const PACE_OPTIONS: PaceOption[] = [
   { label: "200ms", value: 200 },
+  { label: "500ms", value: 500 },
   { label: "700ms", value: 700 },
+  { label: "1000ms", value: 1000 },
   { label: "2000ms", value: 2000 }
 ];
 
@@ -37,6 +39,12 @@ const ROUND_INTERVALS: RoundIntervalOption[] = [
   { label: "Every round", value: 1 },
   { label: "Every 2 rounds", value: 2 },
   { label: "Every 5 rounds", value: 5 }
+];
+
+const ROUND_TRANSITIONS: PaceOption[] = [
+  { label: "1s", value: 1000 },
+  { label: "3s", value: 3000 },
+  { label: "5s", value: 5000 }
 ];
 
 const RANKS: Rank[] = ["A", "K", "Q", "J", "10", "9", "8", "7", "6", "5", "4", "3", "2"];
@@ -233,16 +241,22 @@ type LiveCountProps = {
 function LiveCount({ onBack }: LiveCountProps) {
   const [pace, setPace] = useState<PaceOption>(PACE_OPTIONS[1]);
   const [roundInterval, setRoundInterval] = useState<RoundIntervalOption>(ROUND_INTERVALS[0]);
+  const [roundTransition, setRoundTransition] = useState<PaceOption>(ROUND_TRANSITIONS[0]);
   const [isRunning, setIsRunning] = useState(false);
   const [isPrompting, setIsPrompting] = useState(false);
   const [answer, setAnswer] = useState("");
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [roundsCompleted, setRoundsCompleted] = useState(0);
+  const [dealerRevealPending, setDealerRevealPending] = useState(false);
+  const [postRoundRevealPending, setPostRoundRevealPending] = useState(false);
   const prevResultRef = useRef<unknown>(null);
+  const transitionTimerRef = useRef<number | null>(null);
+  const paceTimerRef = useRef<number | null>(null);
 
   const [state, dispatch] = useReducer(reduce, undefined, () =>
     createInitialState({ rules: DEFAULT_RULES, seed: randomSeed() })
   );
+  const prevPhaseRef = useRef(state.phase);
 
   const totalCards = state.rules.decks * 52;
   const usedCards = totalCards - state.shoe.length;
@@ -295,20 +309,80 @@ function LiveCount({ onBack }: LiveCountProps) {
         setIsRunning(false);
         setFeedback(null);
         setAnswer("");
+      } else {
+        if (transitionTimerRef.current) {
+          window.clearTimeout(transitionTimerRef.current);
+        }
+        if (paceTimerRef.current) {
+          window.clearTimeout(paceTimerRef.current);
+          paceTimerRef.current = null;
+        }
+        setIsRunning(false);
+        const delay = Math.max(roundTransition.value, pace.value);
+        transitionTimerRef.current = window.setTimeout(() => {
+          setIsRunning(true);
+        }, delay);
       }
       return nextCount;
     });
-  }, [state.lastResult, roundInterval.value]);
+  }, [state.lastResult, roundInterval.value, roundTransition.value, pace.value]);
+
+  useEffect(() => {
+    if (state.phase !== "DEALER_TURN") {
+      setDealerRevealPending(false);
+      return;
+    }
+    setDealerRevealPending(true);
+  }, [state.phase]);
+
+  useEffect(() => {
+    if (state.phase !== "BETTING" || !state.lastResult) {
+      setPostRoundRevealPending(false);
+      return;
+    }
+    const prevPhase = prevPhaseRef.current;
+    if (prevPhase === "DEALER_TURN" || prevPhase === "BETTING") {
+      setPostRoundRevealPending(false);
+      return;
+    }
+    setPostRoundRevealPending(true);
+    const timerId = window.setTimeout(() => {
+      setPostRoundRevealPending(false);
+    }, pace.value);
+    return () => window.clearTimeout(timerId);
+  }, [state.phase, state.lastResult, pace.value]);
+
+  useEffect(() => {
+    prevPhaseRef.current = state.phase;
+  }, [state.phase]);
 
   useEffect(() => {
     if (!isRunning || isPrompting) return;
     const timerId = window.setTimeout(() => {
       stepRound();
     }, pace.value);
+    paceTimerRef.current = timerId;
     return () => window.clearTimeout(timerId);
-  }, [isRunning, isPrompting, pace.value, state.phase, state.activeHandIndex, state.dealerHand.cards.length, playerCardsCount]);
+  }, [
+    isRunning,
+    isPrompting,
+    pace.value,
+    state.phase,
+    state.activeHandIndex,
+    state.dealerHand.cards.length,
+    playerCardsCount,
+    dealerRevealPending
+  ]);
 
   const resetSession = () => {
+    if (transitionTimerRef.current) {
+      window.clearTimeout(transitionTimerRef.current);
+      transitionTimerRef.current = null;
+    }
+    if (paceTimerRef.current) {
+      window.clearTimeout(paceTimerRef.current);
+      paceTimerRef.current = null;
+    }
     dispatch({ type: "RESHUFFLE", seed: randomSeed() });
     setIsRunning(false);
     setIsPrompting(false);
@@ -388,6 +462,10 @@ function LiveCount({ onBack }: LiveCountProps) {
     }
 
     if (state.phase === "DEALER_TURN") {
+      if (dealerRevealPending) {
+        setDealerRevealPending(false);
+        return;
+      }
       dispatch({ type: "DEALER_TICK" });
     }
   };
@@ -445,6 +523,20 @@ function LiveCount({ onBack }: LiveCountProps) {
           </div>
         </div>
         <div className="live-count__setting">
+          <div className="live-count__label">Round transition</div>
+          <div className="live-count__options">
+            {ROUND_TRANSITIONS.map((option) => (
+              <button
+                key={option.label}
+                className={option.label === roundTransition.label ? "active" : undefined}
+                onClick={() => setRoundTransition(option)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="live-count__setting">
           <div className="live-count__label">Control</div>
           <div className="live-count__options">
             <button onClick={() => setIsRunning(true)} disabled={isRunning || isPrompting}>
@@ -463,7 +555,12 @@ function LiveCount({ onBack }: LiveCountProps) {
             <div className="live-count__seat-label">Dealer</div>
             <Hand
               cards={state.dealerHand.cards}
-              hideFirstCard={state.phase === "PLAYER_TURN" || state.phase === "INSURANCE"}
+              hideFirstCard={
+                state.phase === "PLAYER_TURN" ||
+                state.phase === "INSURANCE" ||
+                (state.phase === "DEALER_TURN" && dealerRevealPending) ||
+                (state.phase === "BETTING" && postRoundRevealPending)
+              }
               showTotal
             />
           </div>

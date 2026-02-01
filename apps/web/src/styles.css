@@ -259,11 +259,13 @@ body {
 .player-spots {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  justify-content: start;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 275px));
 }
 
 .player-spot {
   padding: 12px;
+  width: 100%;
   border-radius: 12px;
   border: 1px dashed #2d555c;
   min-height: 180px;
@@ -297,6 +299,11 @@ body {
 .player-hand--active {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px rgba(214, 177, 93, 0.25);
+}
+
+.seat-controls {
+  display: grid;
+  gap: 8px;
 }
 
 .hand {
@@ -884,4 +891,57 @@ body {
 .live-count__feedback--bad {
   color: #d64545;
   border-color: rgba(214, 69, 69, 0.6);
+}
+.player-spot--add {
+  border-style: dashed;
+  background: rgba(12, 22, 24, 0.35);
+  cursor: pointer;
+  align-items: center;
+  justify-items: center;
+  text-align: center;
+}
+
+.player-spot--add:hover {
+  border-color: var(--accent);
+}
+
+.player-spot__add {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.seat-skipped {
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px dashed #2d555c;
+  text-align: center;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--accent);
+}
+.seat-controls__row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.seat-controls__row button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.seat-controls button {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid #28484f;
+  background: #16333a;
+  color: var(--ink);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.seat-controls button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }

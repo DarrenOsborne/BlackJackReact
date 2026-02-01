@@ -17,15 +17,24 @@ import {
 const randomSeed = () => Math.floor(Math.random() * 2 ** 32);
 const AUTO_DEAL_MS = 20000;
 const TURN_MS = 20000;
+const INSURANCE_MS = 10000;
 
 export function Play() {
   const [state, dispatch] = useReducer(reduce, undefined, () =>
     createInitialState({ rules: DEFAULT_RULES, seed: randomSeed() })
   );
   const [bet, setBet] = useState(10);
+  const [seatCount, setSeatCount] = useState(1);
+  const [skippedRound, setSkippedRound] = useState(false);
+  const [dealCycle, setDealCycle] = useState(0);
+  const dealStartRef = useRef<number | null>(null);
+  const dealResetTimerRef = useRef<number | null>(null);
+  const canDealRef = useRef(false);
   const [dealCountdownMs, setDealCountdownMs] = useState<number | null>(null);
   const [turnDeadline, setTurnDeadline] = useState<number | null>(null);
   const [turnCountdownMs, setTurnCountdownMs] = useState<number | null>(null);
+  const [insuranceDeadline, setInsuranceDeadline] = useState<number | null>(null);
+  const [insuranceCountdownMs, setInsuranceCountdownMs] = useState<number | null>(null);
   const [dealerRevealPending, setDealerRevealPending] = useState(false);
   const [postRoundRevealPending, setPostRoundRevealPending] = useState(false);
   const prevPhaseRef = useRef(state.phase);
@@ -59,7 +68,7 @@ export function Play() {
         return;
       }
       dispatch({ type: "DEALER_TICK" });
-    }, 700);
+    }, 500);
     return () => window.clearTimeout(timerId);
   }, [state.phase, state.dealerHand.cards.length, dealerRevealPending, dealerNeedsHit]);
 
@@ -76,7 +85,7 @@ export function Play() {
     setPostRoundRevealPending(true);
     const timerId = window.setTimeout(() => {
       setPostRoundRevealPending(false);
-    }, 700);
+    }, 500);
     return () => window.clearTimeout(timerId);
   }, [state.phase, state.lastResult]);
 
@@ -91,6 +100,39 @@ export function Play() {
     setTurnDeadline(null);
     setTurnCountdownMs(null);
   }, [state.phase, state.activeHandIndex]);
+
+  useEffect(() => {
+    if (state.phase === "INSURANCE") {
+      setInsuranceDeadline(Date.now() + INSURANCE_MS);
+      return;
+    }
+    setInsuranceDeadline(null);
+    setInsuranceCountdownMs(null);
+  }, [state.phase]);
+
+  useEffect(() => {
+    if (!insuranceDeadline) {
+      setInsuranceCountdownMs(null);
+      return;
+    }
+
+    let timerId: number;
+    const tick = () => {
+      const remaining = Math.max(0, insuranceDeadline - Date.now());
+      setInsuranceCountdownMs(remaining);
+      if (remaining <= 0) {
+        dispatch({ type: "DECLINE_INSURANCE" });
+        return;
+      }
+      timerId = window.setTimeout(tick, 120);
+    };
+
+    tick();
+
+    return () => {
+      if (timerId) window.clearTimeout(timerId);
+    };
+  }, [insuranceDeadline]);
 
   const totalCards = state.rules.decks * 52;
   const usedCards = totalCards - state.shoe.length;
@@ -170,10 +212,19 @@ export function Play() {
   const canInsure = state.bankroll >= maxInsurance && maxInsurance > 0;
 
   const canDeal = state.phase === "BETTING" && bet > 0 && bet <= state.bankroll;
+  useEffect(() => {
+    canDealRef.current = canDeal;
+  }, [canDeal]);
   const needsShuffle = usedCards / totalCards >= state.rules.penetration;
 
+  const resetBettingView = () => {
+    if (state.playerHands.length > 0 || state.dealerHand.cards.length > 0) {
+      dispatch({ type: "END_ROUND" });
+    }
+  };
   const handleDeal = () => {
     if (!canDeal) return;
+    resetBettingView();
     if (needsShuffle) {
       dispatch({ type: "RESHUFFLE", seed: randomSeed() });
     }
@@ -214,20 +265,43 @@ export function Play() {
   }, [turnDeadline]);
 
   useEffect(() => {
-    if (state.phase !== "BETTING" || !state.lastResult || !canDeal) {
+    if (state.phase !== "BETTING" || !state.lastResult) {
+      if (dealResetTimerRef.current) {
+        window.clearTimeout(dealResetTimerRef.current);
+        dealResetTimerRef.current = null;
+      }
+      dealStartRef.current = null;
       setDealCountdownMs(null);
+      setSkippedRound(false);
       return;
     }
 
-    const start = Date.now();
-    let timerId: number;
+    if (dealStartRef.current === null) {
+      dealStartRef.current = Date.now();
+    }
 
+    let timerId: number;
     const tick = () => {
+      const start = dealStartRef.current ?? Date.now();
       const elapsed = Date.now() - start;
       const remaining = Math.max(0, AUTO_DEAL_MS - elapsed);
       setDealCountdownMs(remaining);
       if (remaining <= 0) {
-        handleDeal();
+        if (canDealRef.current) {
+          handleDeal();
+        } else {
+          setSkippedRound(true);
+          setDealCountdownMs(0);
+          dealStartRef.current = null;
+          resetBettingView();
+          if (dealResetTimerRef.current) {
+            window.clearTimeout(dealResetTimerRef.current);
+          }
+          dealResetTimerRef.current = window.setTimeout(() => {
+            setSkippedRound(false);
+            setDealCycle((prev) => prev + 1);
+          }, 5000);
+        }
         return;
       }
       timerId = window.setTimeout(tick, 120);
@@ -240,7 +314,7 @@ export function Play() {
         window.clearTimeout(timerId);
       }
     };
-  }, [state.phase, state.lastResult, canDeal]);
+  }, [state.phase, state.lastResult, dealCycle]);
 
   return (
     <section className="page play-page">
@@ -309,109 +383,144 @@ export function Play() {
             <div className="player-area">
               <h2>Players</h2>
               <div className="player-spots">
-                {Array.from({ length: 7 }).map((_, index) => (
+                {Array.from({ length: seatCount }).map((_, index) => (
                   <div
                     key={`spot-${index}`}
                     className={`player-spot ${index === 0 ? "active" : ""}`}
                   >
                     <div className="player-spot__title">Seat {index + 1}</div>
                     {index === 0 ? (
-                      state.playerHands.length > 0 ? (
-                        state.playerHands.map((hand, handIndex) => {
-                          const handResult = state.lastResult?.hands.find(
-                            (result) => result.handIndex === handIndex
-                          );
+                      <>
+                        {state.playerHands.length > 0 ? (
+                          state.playerHands.map((hand, handIndex) => {
+                            const handResult = state.lastResult?.hands.find(
+                              (result) => result.handIndex === handIndex
+                            );
 
-                          return (
-                            <PlayerHandView
-                              key={`hand-${handIndex}`}
-                              hand={hand}
-                              label={`Hand ${handIndex + 1}`}
-                              isActive={
-                                state.phase === "PLAYER_TURN" && handIndex === state.activeHandIndex
-                              }
-                              resultOutcome={handResult?.outcome}
-                              canHit={handIndex === state.activeHandIndex ? canHit : false}
-                              canDouble={handIndex === state.activeHandIndex ? canDouble : false}
-                              canSplit={handIndex === state.activeHandIndex ? canSplit : false}
-                              canStand={handIndex === state.activeHandIndex ? canStand : false}
-                              canSurrender={handIndex === state.activeHandIndex ? canSurrender : false}
-                              onHit={() => {
-                                resetTurnTimer();
-                                dispatch({ type: "HIT" });
-                              }}
-                              onDouble={() => {
-                                resetTurnTimer();
-                                dispatch({ type: "DOUBLE" });
-                              }}
-                              onSplit={() => {
-                                resetTurnTimer();
-                                dispatch({ type: "SPLIT" });
-                              }}
-                              onStand={() => dispatch({ type: "STAND" })}
-                              onSurrender={() => dispatch({ type: "SURRENDER" })}
-                              countdownMs={
-                                handIndex === state.activeHandIndex ? turnCountdownMs : undefined
-                              }
-                              countdownTotalMs={TURN_MS}
+                            return (
+                              <PlayerHandView
+                                key={`hand-${handIndex}`}
+                                hand={hand}
+                                label={`Hand ${handIndex + 1}`}
+                                isActive={
+                                  state.phase === "PLAYER_TURN" &&
+                                  handIndex === state.activeHandIndex
+                                }
+                                resultOutcome={handResult?.outcome}
+                                canHit={handIndex === state.activeHandIndex ? canHit : false}
+                                canDouble={handIndex === state.activeHandIndex ? canDouble : false}
+                                canSplit={handIndex === state.activeHandIndex ? canSplit : false}
+                                canStand={handIndex === state.activeHandIndex ? canStand : false}
+                                canSurrender={
+                                  handIndex === state.activeHandIndex ? canSurrender : false
+                                }
+                                onHit={() => {
+                                  resetTurnTimer();
+                                  dispatch({ type: "HIT" });
+                                }}
+                                onDouble={() => {
+                                  resetTurnTimer();
+                                  dispatch({ type: "DOUBLE" });
+                                }}
+                                onSplit={() => {
+                                  resetTurnTimer();
+                                  dispatch({ type: "SPLIT" });
+                                }}
+                                onStand={() => dispatch({ type: "STAND" })}
+                                onSurrender={() => dispatch({ type: "SURRENDER" })}
+                                countdownMs={
+                                  handIndex === state.activeHandIndex ? turnCountdownMs : undefined
+                                }
+                                countdownTotalMs={TURN_MS}
+                              />
+                            );
+                          })
+                        ) : skippedRound ? (
+                          <div className="seat-skipped">Round Skipped</div>
+                        ) : (
+                          <PlayerHandView
+                            hand={createEmptyHand(0)}
+                            label="Hand 1"
+                            isActive={false}
+                            showBet={false}
+                            showTotal={false}
+                          />
+                        )}
+                        {state.phase === "BETTING" && (
+                          <div className="seat-controls">
+                            <BetControls
+                              bet={bet}
+                              onBetChange={setBet}
+                              onDeal={handleDeal}
+                              canDeal={canDeal}
+                              countdownMs={dealCountdownMs ?? undefined}
+                              countdownTotalMs={AUTO_DEAL_MS}
                             />
-                          );
-                        })
-                      ) : (
-                        <PlayerHandView
-                          hand={createEmptyHand(0)}
-                          label="Hand 1"
-                          isActive={false}
-                          showBet={false}
-                          showTotal={false}
-                        />
-                      )
+                            {needsShuffle && (
+                              <button onClick={handleShuffle}>Shuffle Shoe</button>
+                            )}
+                          </div>
+                        )}
+                        {state.phase === "INSURANCE" && (
+                          <div className="seat-controls">
+                            <div>Dealer shows an Ace. Insurance?</div>
+                            <div className="seat-controls__row">
+                              <button
+                                onClick={() =>
+                                  dispatch({ type: "TAKE_INSURANCE", amount: maxInsurance })
+                                }
+                                disabled={!canInsure}
+                              >
+                                Take Insurance ({maxInsurance})
+                              </button>
+                              <button
+                                className="stand-button"
+                                onClick={() => dispatch({ type: "DECLINE_INSURANCE" })}
+                              >
+                                No Thanks
+                                {typeof insuranceCountdownMs === "number" && (
+                                  <span
+                                    className="stand-progress"
+                                    style={{
+                                      width: `${Math.max(
+                                        0,
+                                        Math.min(100, (insuranceCountdownMs / INSURANCE_MS) * 100)
+                                      )}%`
+                                    }}
+                                  />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        <div className="bankroll-strip">
+                          <div className="bankroll-item">Bankroll: {state.bankroll}</div>
+                          {state.insuranceBet > 0 && (
+                            <div className="bankroll-item">Insurance: {state.insuranceBet}</div>
+                          )}
+                        </div>
+                      </>
                     ) : (
                       <div>Empty</div>
                     )}
                   </div>
                 ))}
+                {seatCount < 7 && (
+                  <button
+                    type="button"
+                    className="player-spot player-spot--add"
+                    onClick={() => setSeatCount((prev) => Math.min(7, prev + 1))}
+                  >
+                    <div className="player-spot__title">Add seat</div>
+                    <div className="player-spot__add">+</div>
+                  </button>
+                )}
               </div>
             </div>
           </div>
 
-          <div className="bankroll-strip">
-            <div className="bankroll-item">Bankroll: {state.bankroll}</div>
-            {state.insuranceBet > 0 && (
-              <div className="bankroll-item">Insurance: {state.insuranceBet}</div>
-            )}
-          </div>
         </div>
       </TableLayout>
-
-      {state.phase === "BETTING" && (
-        <div className="round-controls">
-          <BetControls
-            bet={bet}
-            onBetChange={setBet}
-            onDeal={handleDeal}
-            canDeal={canDeal}
-            countdownMs={dealCountdownMs ?? undefined}
-            countdownTotalMs={AUTO_DEAL_MS}
-          />
-          {needsShuffle && (
-            <button onClick={handleShuffle}>Shuffle Shoe</button>
-          )}
-        </div>
-      )}
-
-      {state.phase === "INSURANCE" && (
-        <div className="insurance-controls">
-          <div>Dealer shows an Ace. Insurance?</div>
-          <button
-            onClick={() => dispatch({ type: "TAKE_INSURANCE", amount: maxInsurance })}
-            disabled={!canInsure}
-          >
-            Take Insurance ({maxInsurance})
-          </button>
-          <button onClick={() => dispatch({ type: "DECLINE_INSURANCE" })}>No Thanks</button>
-        </div>
-      )}
 
     </section>
   );
@@ -638,4 +747,3 @@ function HandActionSlot({ onHit, onDouble, canHit = false, canDouble = false }: 
     </div>
   );
 }
-
