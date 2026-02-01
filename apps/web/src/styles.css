@@ -749,3 +749,139 @@ body {
   opacity: 0.6;
   cursor: not-allowed;
 }
+.live-count {
+  margin-top: 16px;
+  display: grid;
+  gap: 16px;
+}
+
+.live-count__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.live-count__title {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.live-count__hint {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.live-count__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.live-count__settings {
+  display: grid;
+  gap: 12px;
+}
+
+.live-count__setting {
+  display: grid;
+  gap: 6px;
+}
+
+.live-count__label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  opacity: 0.7;
+}
+
+.live-count__options {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.live-count__options button,
+.live-count__actions button {
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid #2a4f56;
+  background: #162f35;
+  color: var(--ink);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.live-count__options button.active {
+  border-color: var(--accent);
+  background: #1c3a40;
+}
+
+.live-count__table {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(8, 15, 18, 0.35);
+  display: grid;
+  gap: 12px;
+}
+
+.live-count__row {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.live-count__seat {
+  display: grid;
+  gap: 8px;
+}
+
+.live-count__seat-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  opacity: 0.7;
+}
+
+.live-count__status {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.live-count__prompt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.live-count__prompt input {
+  width: 120px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #2a4f56;
+  background: rgba(8, 15, 18, 0.6);
+  color: var(--ink);
+}
+
+.live-count__feedback {
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid #2a4f56;
+  background: rgba(8, 15, 18, 0.5);
+}
+
+.live-count__feedback--ok {
+  color: #7cc7b1;
+  border-color: rgba(124, 199, 177, 0.6);
+}
+
+.live-count__feedback--bad {
+  color: #d64545;
+  border-color: rgba(214, 69, 69, 0.6);
+}

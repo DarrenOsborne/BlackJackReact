@@ -1,4 +1,4 @@
-﻿import type { GameAction } from "./actions";
+import type { GameAction } from "./actions";
 import type { Hand, Outcome, RoundState } from "./types";
 import { payoutForOutcome } from "../rules/payoutRules";
 import { shouldShuffle } from "../rules/shoeRules";
@@ -52,6 +52,18 @@ function settleIfBlackjack(state: RoundState) {
     : state.dealerHand;
 
   return settleRound({ ...state, dealerHand });
+}
+
+function finishInitialDeal(state: RoundState) {
+  const upcard = state.dealerHand.cards[0];
+  if (upcard && upcard.rank === "A" && state.rules.allowInsurance) {
+    return { ...state, phase: "INSURANCE", insuranceOffered: true };
+  }
+
+  const blackjackSettlement = settleIfBlackjack(state);
+  if (blackjackSettlement) return blackjackSettlement;
+
+  return { ...state, phase: "PLAYER_TURN" };
 }
 
 function drawFromShoe(state: RoundState) {
@@ -238,7 +250,41 @@ export function reduce(state: RoundState, action: GameAction): RoundState {
         bankroll: state.bankroll - action.amount
       };
     }
-    case "DEAL": {
+    case "BEGIN_DEAL": {
+      if (state.phase !== "BETTING") return state;
+      if (state.pendingBet <= 0) return state;
+
+      let workingState = state;
+      if (
+        shouldShuffle(state.shoe, state.discard, {
+          decks: state.rules.decks,
+          penetration: state.rules.penetration
+        })
+      ) {
+        const seed = Math.floor(Math.random() * 2 ** 32);
+        workingState = {
+          ...state,
+          shoe: shuffle(createShoe(state.rules.decks), mulberry32(seed)),
+          discard: [],
+          runningCount: 0
+        };
+      }
+
+      const bet = workingState.pendingBet;
+      const nextRoundId = workingState.lastResult ? workingState.roundId + 1 : workingState.roundId;
+      return {
+        ...workingState,
+        phase: "DEALING",
+        pendingBet: 0,
+        insuranceBet: 0,
+        insuranceOffered: false,
+        playerHands: [createEmptyHand(bet)],
+        dealerHand: createEmptyHand(0),
+        activeHandIndex: 0,
+        lastResult: undefined,
+        roundId: nextRoundId
+      };
+    }    case "DEAL": {
       if (state.phase !== "BETTING") return state;
       if (state.pendingBet <= 0) return state;
 
@@ -278,15 +324,7 @@ export function reduce(state: RoundState, action: GameAction): RoundState {
       next = dealToPlayer(next, 0);
       next = dealToDealer(next);
 
-      const upcard = next.dealerHand.cards[0];
-      if (upcard && upcard.rank === "A" && next.rules.allowInsurance) {
-        return { ...next, phase: "INSURANCE", insuranceOffered: true };
-      }
-
-      const blackjackSettlement = settleIfBlackjack(next);
-      if (blackjackSettlement) return blackjackSettlement;
-
-      return { ...next, phase: "PLAYER_TURN" };
+      return finishInitialDeal(next);
     }
     case "HIT": {
       if (state.phase !== "PLAYER_TURN") return state;
@@ -459,7 +497,29 @@ export function reduce(state: RoundState, action: GameAction): RoundState {
       const played = playDealer(state);
       return settleRound(played);
     }
-    case "DEALER_TICK": {
+    case "DEAL_PLAYER": {
+      if (state.phase !== "DEALING") return state;
+      if (!state.playerHands[action.handIndex]) return state;
+      const next = dealToPlayer(state, action.handIndex);
+      if (
+        next.playerHands[0].cards.length >= 2 &&
+        next.dealerHand.cards.length >= 2
+      ) {
+        return finishInitialDeal(next);
+      }
+      return next;
+    }
+    case "DEAL_DEALER": {
+      if (state.phase !== "DEALING") return state;
+      const next = dealToDealer(state);
+      if (
+        next.playerHands[0].cards.length >= 2 &&
+        next.dealerHand.cards.length >= 2
+      ) {
+        return finishInitialDeal(next);
+      }
+      return next;
+    }    case "DEALER_TICK": {
       if (state.phase !== "DEALER_TURN") return state;
       const dealerValue = evaluateHand(state.dealerHand.cards);
       if (dealerShouldHit(dealerValue, state.rules.dealerStandsOnSoft17)) {
