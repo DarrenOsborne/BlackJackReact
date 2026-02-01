@@ -322,7 +322,7 @@ function reshuffleShoe(state: RoundState, seed: number): RoundState {
       ...seat,
       hands: [],
       activeHandIndex: 0,
-      pendingBet: 0,
+      pendingBet: seat.pendingBet,
       ready: false,
       insuranceBet: 0,
       insuranceOffered: false,
@@ -375,7 +375,7 @@ export function reduce(state: RoundState, action: GameAction): RoundState {
       const newSeat: Seat = {
         seatIndex,
         bankroll,
-        pendingBet: 0,
+        pendingBet: 10,
         ready: false,
         hands: [],
         activeHandIndex: 0,
@@ -446,7 +446,7 @@ export function reduce(state: RoundState, action: GameAction): RoundState {
         return {
           ...seat,
           bankroll: seat.bankroll - bet,
-          pendingBet: 0,
+          pendingBet: bet,
           ready: false,
           hands: [createEmptyHand(bet)],
           activeHandIndex: 0,

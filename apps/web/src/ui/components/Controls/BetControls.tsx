@@ -6,6 +6,7 @@ type BetControlsProps = {
   onDeal?: () => void;
   showDeal?: boolean;
   dealLabel?: string;
+  dealClassName?: string;
   canDeal?: boolean;
   countdownMs?: number;
   countdownTotalMs?: number;
@@ -26,6 +27,7 @@ export function BetControls({
   onDeal,
   showDeal = true,
   dealLabel = "Deal",
+  dealClassName,
   canDeal = true,
   countdownMs,
   countdownTotalMs
@@ -118,7 +120,11 @@ export function BetControls({
         -5
       </button>
       {showDeal && (
-        <button className="deal-button" onClick={onDeal} disabled={!onDeal || !canDeal}>
+        <button
+          className={["deal-button", dealClassName].filter(Boolean).join(" ")}
+          onClick={onDeal}
+          disabled={!onDeal || !canDeal}
+        >
           {dealLabel}
           {showCountdown && (
             <span className="deal-progress" style={{ width: `${countdownPercent}%` }} />

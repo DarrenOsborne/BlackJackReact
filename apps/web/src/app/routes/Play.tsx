@@ -215,6 +215,12 @@ export function Play() {
     (seat) => seat.ready && seat.pendingBet > 0 && seat.pendingBet <= seat.bankroll
   );
   const canDeal = state.phase === "BETTING" && readySeats.length > 0;
+  const allSeatsReady =
+    state.phase === "BETTING" &&
+    state.seats.length > 0 &&
+    state.seats.every(
+      (seat) => seat.ready && seat.pendingBet > 0 && seat.pendingBet <= seat.bankroll
+    );
 
   useEffect(() => {
     canDealRef.current = canDeal;
@@ -283,6 +289,10 @@ export function Play() {
       const elapsed = Date.now() - start;
       const remaining = Math.max(0, AUTO_DEAL_MS - elapsed);
       setDealCountdownMs(remaining);
+      if (allSeatsReady) {
+        handleDealNow();
+        return;
+      }
       if (remaining <= 0) {
         if (canDealRef.current) {
           handleDealNow();
@@ -309,7 +319,7 @@ export function Play() {
         window.clearTimeout(timerId);
       }
     };
-  }, [state.phase, dealCycle]);
+  }, [state.phase, dealCycle, allSeatsReady]);
 
   return (
     <section className="page play-page">
@@ -470,13 +480,14 @@ export function Play() {
                                 ready: !seat.ready
                               })
                             }
-                            dealLabel={seat.ready ? "Ready ✓" : "Ready"}
+                            dealLabel="Ready"
                             canDeal={
                               seat.ready ||
                               (seat.pendingBet > 0 && seat.pendingBet <= seat.bankroll)
                             }
                             countdownMs={dealCountdownMs ?? undefined}
                             countdownTotalMs={AUTO_DEAL_MS}
+                            dealClassName={seat.ready ? "ready-button ready-button--on" : "ready-button ready-button--off"}
                           />
                           {needsShuffle && seat.seatIndex === 0 && (
                             <button onClick={handleShuffle}>Shuffle Shoe</button>

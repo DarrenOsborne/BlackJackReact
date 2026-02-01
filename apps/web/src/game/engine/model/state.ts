@@ -36,7 +36,7 @@ export function createInitialState(options: InitOptions = {}): RoundState {
   const seats: Seat[] = Array.from({ length: seatCount }).map((_, index) => ({
     seatIndex: index,
     bankroll,
-    pendingBet: 0,
+    pendingBet: 10,
     ready: false,
     hands: [],
     activeHandIndex: 0,
