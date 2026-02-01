@@ -4,6 +4,8 @@ type BetControlsProps = {
   bet: number;
   onBetChange?: (amount: number) => void;
   onDeal?: () => void;
+  showDeal?: boolean;
+  dealLabel?: string;
   canDeal?: boolean;
   countdownMs?: number;
   countdownTotalMs?: number;
@@ -22,6 +24,8 @@ export function BetControls({
   bet,
   onBetChange,
   onDeal,
+  showDeal = true,
+  dealLabel = "Deal",
   canDeal = true,
   countdownMs,
   countdownTotalMs
@@ -113,12 +117,14 @@ export function BetControls({
       >
         -5
       </button>
-      <button className="deal-button" onClick={onDeal} disabled={!onDeal || !canDeal}>
-        Deal
-        {showCountdown && (
-          <span className="deal-progress" style={{ width: `${countdownPercent}%` }} />
-        )}
-      </button>
+      {showDeal && (
+        <button className="deal-button" onClick={onDeal} disabled={!onDeal || !canDeal}>
+          {dealLabel}
+          {showCountdown && (
+            <span className="deal-progress" style={{ width: `${countdownPercent}%` }} />
+          )}
+        </button>
+      )}
     </div>
   );
 }

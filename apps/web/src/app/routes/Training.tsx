@@ -262,36 +262,37 @@ function LiveCount({ onBack }: LiveCountProps) {
   const usedCards = totalCards - state.shoe.length;
   const needsShuffle = usedCards / totalCards >= state.rules.penetration;
 
-  const activeHand = state.playerHands[state.activeHandIndex];
+  const seat = state.seats[0];
+  const activeHand = seat?.hands[seat.activeHandIndex];
   const dealerUpcard = state.dealerHand.cards[0];
-  const playerCardsCount = state.playerHands[0]?.cards.length ?? 0;
+  const playerCardsCount = seat?.hands[0]?.cards.length ?? 0;
 
   const canSplit = useMemo(() => {
-    if (!activeHand) return false;
+    if (!seat || !activeHand) return false;
     if (!state.rules.allowSplit) return false;
     if (activeHand.cards.length !== 2) return false;
     if (activeHand.cards[0].rank !== activeHand.cards[1].rank) return false;
-    if (state.playerHands.length >= state.rules.maxHands) return false;
-    if (state.bankroll < activeHand.bet) return false;
+    if (seat.hands.length >= state.rules.maxHands) return false;
+    if (seat.bankroll < activeHand.bet) return false;
     if (activeHand.splitFromAce && !state.rules.allowResplitAces) return false;
     if (activeHand.cards[0].rank === "A" && activeHand.isSplitChild && !state.rules.allowResplitAces) {
       return false;
     }
     return true;
-  }, [activeHand, state.bankroll, state.playerHands.length, state.rules]);
+  }, [seat, activeHand, state.rules]);
 
   const canDouble = useMemo(() => {
-    if (!activeHand) return false;
+    if (!seat || !activeHand) return false;
     if (!state.rules.allowDouble) return false;
     if (activeHand.cards.length !== 2) return false;
     if (activeHand.isSplitChild && !state.rules.allowDoubleAfterSplit) return false;
-    if (state.bankroll < activeHand.bet) return false;
+    if (seat.bankroll < activeHand.bet) return false;
     if (state.rules.doubleAllowedTotals) {
       const total = evaluateHand(activeHand.cards).total;
       return state.rules.doubleAllowedTotals.includes(total);
     }
     return true;
-  }, [activeHand, state.bankroll, state.rules]);
+  }, [seat, activeHand, state.rules]);
 
   const perfectPlay = useMemo(
     () => getPerfectPlay(activeHand, dealerUpcard, state.rules, canSplit),
@@ -368,7 +369,7 @@ function LiveCount({ onBack }: LiveCountProps) {
     isPrompting,
     pace.value,
     state.phase,
-    state.activeHandIndex,
+    seat?.activeHandIndex,
     state.dealerHand.cards.length,
     playerCardsCount,
     dealerRevealPending
@@ -397,31 +398,18 @@ function LiveCount({ onBack }: LiveCountProps) {
       if (needsShuffle) {
         dispatch({ type: "RESHUFFLE", seed: randomSeed() });
       }
-      dispatch({ type: "PLACE_BET", amount: 1 });
+      if (seat && seat.pendingBet === 0) {
+        dispatch({ type: "SET_BET", seatIndex: seat.seatIndex, amount: 1 });
+      }
+      if (seat && !seat.ready) {
+        dispatch({ type: "TOGGLE_READY", seatIndex: seat.seatIndex, ready: true });
+      }
       dispatch({ type: "BEGIN_DEAL" });
       return;
     }
 
     if (state.phase === "DEALING") {
-      const playerCards = state.playerHands[0]?.cards.length ?? 0;
-      const dealerCards = state.dealerHand.cards.length;
-
-      if (playerCards === 0 && dealerCards === 0) {
-        dispatch({ type: "DEAL_PLAYER", handIndex: 0 });
-        return;
-      }
-      if (playerCards === 1 && dealerCards === 0) {
-        dispatch({ type: "DEAL_DEALER" });
-        return;
-      }
-      if (playerCards === 1 && dealerCards === 1) {
-        dispatch({ type: "DEAL_PLAYER", handIndex: 0 });
-        return;
-      }
-      if (playerCards === 2 && dealerCards === 1) {
-        dispatch({ type: "DEAL_DEALER" });
-        return;
-      }
+      dispatch({ type: "DEAL_STEP" });
       return;
     }
 
@@ -566,8 +554,8 @@ function LiveCount({ onBack }: LiveCountProps) {
           </div>
           <div className="live-count__seat">
             <div className="live-count__seat-label">Player</div>
-            {state.playerHands.length > 0 ? (
-              state.playerHands.map((hand, index) => (
+            {seat && seat.hands.length > 0 ? (
+              seat.hands.map((hand, index) => (
                 <Hand key={`live-hand-${index}`} cards={hand.cards} label={`Hand ${index + 1}`} />
               ))
             ) : (

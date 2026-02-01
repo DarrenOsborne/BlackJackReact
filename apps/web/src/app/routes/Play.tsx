@@ -18,14 +18,12 @@ const randomSeed = () => Math.floor(Math.random() * 2 ** 32);
 const AUTO_DEAL_MS = 20000;
 const TURN_MS = 20000;
 const INSURANCE_MS = 10000;
+const DEALER_TICK_MS = 500;
 
 export function Play() {
   const [state, dispatch] = useReducer(reduce, undefined, () =>
     createInitialState({ rules: DEFAULT_RULES, seed: randomSeed() })
   );
-  const [bet, setBet] = useState(10);
-  const [seatCount, setSeatCount] = useState(1);
-  const [skippedRound, setSkippedRound] = useState(false);
   const [dealCycle, setDealCycle] = useState(0);
   const dealStartRef = useRef<number | null>(null);
   const dealResetTimerRef = useRef<number | null>(null);
@@ -38,6 +36,10 @@ export function Play() {
   const [dealerRevealPending, setDealerRevealPending] = useState(false);
   const [postRoundRevealPending, setPostRoundRevealPending] = useState(false);
   const prevPhaseRef = useRef(state.phase);
+
+  const activeSeat = state.seats[state.activeSeatIndex];
+  const activeHand = activeSeat?.hands[activeSeat.activeHandIndex];
+  const activeValue = activeHand ? evaluateHand(activeHand.cards) : undefined;
 
   useLayoutEffect(() => {
     if (state.phase !== "DEALER_TURN") {
@@ -68,7 +70,7 @@ export function Play() {
         return;
       }
       dispatch({ type: "DEALER_TICK" });
-    }, 500);
+    }, DEALER_TICK_MS);
     return () => window.clearTimeout(timerId);
   }, [state.phase, state.dealerHand.cards.length, dealerRevealPending, dealerNeedsHit]);
 
@@ -85,13 +87,14 @@ export function Play() {
     setPostRoundRevealPending(true);
     const timerId = window.setTimeout(() => {
       setPostRoundRevealPending(false);
-    }, 500);
+    }, DEALER_TICK_MS);
     return () => window.clearTimeout(timerId);
   }, [state.phase, state.lastResult]);
 
   useEffect(() => {
     prevPhaseRef.current = state.phase;
   }, [state.phase]);
+
   useEffect(() => {
     if (state.phase === "PLAYER_TURN") {
       setTurnDeadline(Date.now() + TURN_MS);
@@ -99,7 +102,7 @@ export function Play() {
     }
     setTurnDeadline(null);
     setTurnCountdownMs(null);
-  }, [state.phase, state.activeHandIndex]);
+  }, [state.phase, state.activeSeatIndex, activeSeat?.activeHandIndex]);
 
   useEffect(() => {
     if (state.phase === "INSURANCE") {
@@ -108,7 +111,7 @@ export function Play() {
     }
     setInsuranceDeadline(null);
     setInsuranceCountdownMs(null);
-  }, [state.phase]);
+  }, [state.phase, state.activeSeatIndex]);
 
   useEffect(() => {
     if (!insuranceDeadline) {
@@ -139,27 +142,21 @@ export function Play() {
   const penetrationPercent = Math.min(100, Math.max(0, (usedCards / totalCards) * 100));
   const cutPercent = state.rules.penetration * 100;
 
-  const activeHand = state.playerHands[state.activeHandIndex];
-  const activeValue = activeHand ? evaluateHand(activeHand.cards) : undefined;
   const hideDealerHole =
     state.phase === "PLAYER_TURN" ||
     state.phase === "INSURANCE" ||
     (state.phase === "DEALER_TURN" && dealerRevealPending) ||
     (state.phase === "BETTING" && postRoundRevealPending);
-  const dealerHasCards = state.dealerHand.cards.length > 0;
+
   const seatResults = useMemo(() => {
     if (!state.lastResult) return [];
     const seatMap = new Map<number, { outcomes: string[]; payout: number }>();
 
     state.lastResult.hands.forEach((hand) => {
-      const seatIndex =
-        typeof (hand as { seatIndex?: number }).seatIndex === "number"
-          ? (hand as { seatIndex: number }).seatIndex
-          : 0;
-      const existing = seatMap.get(seatIndex) ?? { outcomes: [], payout: 0 };
+      const existing = seatMap.get(hand.seatIndex) ?? { outcomes: [], payout: 0 };
       existing.outcomes.push(hand.outcome);
       existing.payout += hand.payout;
-      seatMap.set(seatIndex, existing);
+      seatMap.set(hand.seatIndex, existing);
     });
 
     return Array.from(seatMap.entries()).map(([seatIndex, data]) => ({
@@ -168,39 +165,41 @@ export function Play() {
       payout: data.payout
     }));
   }, [state.lastResult]);
+
   const canSplit = useMemo(() => {
-    if (!activeHand) return false;
+    if (!activeSeat || !activeHand) return false;
     if (!state.rules.allowSplit) return false;
     if (activeHand.cards.length !== 2) return false;
     if (activeHand.cards[0].rank !== activeHand.cards[1].rank) return false;
-    if (state.playerHands.length >= state.rules.maxHands) return false;
-    if (state.bankroll < activeHand.bet) return false;
+    if (activeSeat.hands.length >= state.rules.maxHands) return false;
+    if (activeSeat.bankroll < activeHand.bet) return false;
     if (activeHand.splitFromAce && !state.rules.allowResplitAces) return false;
     if (activeHand.cards[0].rank === "A" && activeHand.isSplitChild && !state.rules.allowResplitAces) {
       return false;
     }
     return true;
-  }, [activeHand, state.bankroll, state.playerHands.length, state.rules]);
+  }, [activeSeat, activeHand, state.rules]);
 
   const dealerUpcard = state.dealerHand.cards[0];
   const strategyText = useMemo(
     () => getPerfectPlay(activeHand, dealerUpcard, state.rules, canSplit),
     [activeHand, dealerUpcard, state.rules, canSplit]
   );
+
   const canHit = state.phase === "PLAYER_TURN" && activeHand?.status === "ACTIVE";
   const canStand = state.phase === "PLAYER_TURN" && activeHand?.status === "ACTIVE";
 
   const canDouble = useMemo(() => {
-    if (!activeHand) return false;
+    if (!activeSeat || !activeHand) return false;
     if (!state.rules.allowDouble) return false;
     if (activeHand.cards.length !== 2) return false;
     if (activeHand.isSplitChild && !state.rules.allowDoubleAfterSplit) return false;
-    if (state.bankroll < activeHand.bet) return false;
+    if (activeSeat.bankroll < activeHand.bet) return false;
     if (state.rules.doubleAllowedTotals && activeValue) {
       return state.rules.doubleAllowedTotals.includes(activeValue.total);
     }
     return true;
-  }, [activeHand, activeValue, state.bankroll, state.rules]);
+  }, [activeSeat, activeHand, activeValue, state.rules]);
 
   const canSurrender = useMemo(() => {
     if (!activeHand) return false;
@@ -208,27 +207,26 @@ export function Play() {
     return activeHand.cards.length === 2;
   }, [activeHand, state.rules.allowSurrender]);
 
-  const maxInsurance = state.playerHands[0]?.bet ? state.playerHands[0].bet / 2 : 0;
-  const canInsure = state.bankroll >= maxInsurance && maxInsurance > 0;
+  const maxInsurance = activeSeat?.hands[0]?.bet ? activeSeat.hands[0].bet / 2 : 0;
+  const canInsure =
+    state.phase === "INSURANCE" && activeSeat ? activeSeat.bankroll >= maxInsurance && maxInsurance > 0 : false;
 
-  const canDeal = state.phase === "BETTING" && bet > 0 && bet <= state.bankroll;
+  const readySeats = state.seats.filter(
+    (seat) => seat.ready && seat.pendingBet > 0 && seat.pendingBet <= seat.bankroll
+  );
+  const canDeal = state.phase === "BETTING" && readySeats.length > 0;
+
   useEffect(() => {
     canDealRef.current = canDeal;
   }, [canDeal]);
+
   const needsShuffle = usedCards / totalCards >= state.rules.penetration;
 
-  const resetBettingView = () => {
-    if (state.playerHands.length > 0 || state.dealerHand.cards.length > 0) {
-      dispatch({ type: "END_ROUND" });
-    }
-  };
-  const handleDeal = () => {
-    if (!canDeal) return;
-    resetBettingView();
+  const handleDealNow = () => {
+    if (!canDealRef.current) return;
     if (needsShuffle) {
       dispatch({ type: "RESHUFFLE", seed: randomSeed() });
     }
-    dispatch({ type: "PLACE_BET", amount: bet });
     dispatch({ type: "DEAL" });
   };
 
@@ -265,14 +263,13 @@ export function Play() {
   }, [turnDeadline]);
 
   useEffect(() => {
-    if (state.phase !== "BETTING" || !state.lastResult) {
+    if (state.phase !== "BETTING") {
       if (dealResetTimerRef.current) {
         window.clearTimeout(dealResetTimerRef.current);
         dealResetTimerRef.current = null;
       }
       dealStartRef.current = null;
       setDealCountdownMs(null);
-      setSkippedRound(false);
       return;
     }
 
@@ -288,17 +285,15 @@ export function Play() {
       setDealCountdownMs(remaining);
       if (remaining <= 0) {
         if (canDealRef.current) {
-          handleDeal();
+          handleDealNow();
         } else {
-          setSkippedRound(true);
+          dispatch({ type: "END_ROUND" });
           setDealCountdownMs(0);
           dealStartRef.current = null;
-          resetBettingView();
           if (dealResetTimerRef.current) {
             window.clearTimeout(dealResetTimerRef.current);
           }
           dealResetTimerRef.current = window.setTimeout(() => {
-            setSkippedRound(false);
             setDealCycle((prev) => prev + 1);
           }, 5000);
         }
@@ -314,7 +309,7 @@ export function Play() {
         window.clearTimeout(timerId);
       }
     };
-  }, [state.phase, state.lastResult, dealCycle]);
+  }, [state.phase, dealCycle]);
 
   return (
     <section className="page play-page">
@@ -356,12 +351,21 @@ export function Play() {
                         Dealer total: {state.lastResult.dealerTotal} | Dealer blackjack:{" "}
                         {state.lastResult.dealerBlackjack ? "Yes" : "No"}
                       </div>
-                      {state.lastResult.insuranceBet > 0 && (
-                        <div>Insurance payout: {state.lastResult.insurancePayout}</div>
+                      {state.lastResult.insurance.length > 0 && (
+                        <div>
+                          Insurance payouts:{" "}
+                          {state.lastResult.insurance
+                            .map(
+                              (entry) =>
+                                `Seat ${entry.seatIndex + 1}: ${entry.payout}`
+                            )
+                            .join(", ")}
+                        </div>
                       )}
                       {seatResults.map((seat) => (
                         <div key={`seat-${seat.seatIndex}`}>
-                          Seat {seat.seatIndex + 1}: {seat.outcomes.join(", ")} (payout {seat.payout})
+                          Seat {seat.seatIndex + 1}: {seat.outcomes.join(", ")} (payout{" "}
+                          {seat.payout})
                         </div>
                       ))}
                     </div>
@@ -375,7 +379,9 @@ export function Play() {
                   <p>Win: 1:1</p>
                   <p>Push: Bet returned</p>
                   <p>Insurance: 2:1</p>
-                  <p>Surrender: Lose half</p>                  <p>Dealer stands on soft 17 (S17)</p>                  <p>Double after split allowed</p>
+                  <p>Surrender: Lose half</p>
+                  <p>Dealer stands on soft 17 (S17)</p>
+                  <p>Double after split allowed</p>
                 </div>
               </div>
             </div>
@@ -383,85 +389,104 @@ export function Play() {
             <div className="player-area">
               <h2>Players</h2>
               <div className="player-spots">
-                {Array.from({ length: seatCount }).map((_, index) => (
-                  <div
-                    key={`spot-${index}`}
-                    className={`player-spot ${index === 0 ? "active" : ""}`}
-                  >
-                    <div className="player-spot__title">Seat {index + 1}</div>
-                    {index === 0 ? (
-                      <>
-                        {state.playerHands.length > 0 ? (
-                          state.playerHands.map((hand, handIndex) => {
-                            const handResult = state.lastResult?.hands.find(
-                              (result) => result.handIndex === handIndex
-                            );
+                {state.seats.map((seat) => {
+                  const isActiveSeat =
+                    (state.phase === "PLAYER_TURN" || state.phase === "INSURANCE") &&
+                    seat.seatIndex === state.activeSeatIndex;
+                  const seatResultsByHand = state.lastResult
+                    ? state.lastResult.hands.filter((hand) => hand.seatIndex === seat.seatIndex)
+                    : [];
 
-                            return (
-                              <PlayerHandView
-                                key={`hand-${handIndex}`}
-                                hand={hand}
-                                label={`Hand ${handIndex + 1}`}
-                                isActive={
-                                  state.phase === "PLAYER_TURN" &&
-                                  handIndex === state.activeHandIndex
-                                }
-                                resultOutcome={handResult?.outcome}
-                                canHit={handIndex === state.activeHandIndex ? canHit : false}
-                                canDouble={handIndex === state.activeHandIndex ? canDouble : false}
-                                canSplit={handIndex === state.activeHandIndex ? canSplit : false}
-                                canStand={handIndex === state.activeHandIndex ? canStand : false}
-                                canSurrender={
-                                  handIndex === state.activeHandIndex ? canSurrender : false
-                                }
-                                onHit={() => {
-                                  resetTurnTimer();
-                                  dispatch({ type: "HIT" });
-                                }}
-                                onDouble={() => {
-                                  resetTurnTimer();
-                                  dispatch({ type: "DOUBLE" });
-                                }}
-                                onSplit={() => {
-                                  resetTurnTimer();
-                                  dispatch({ type: "SPLIT" });
-                                }}
-                                onStand={() => dispatch({ type: "STAND" })}
-                                onSurrender={() => dispatch({ type: "SURRENDER" })}
-                                countdownMs={
-                                  handIndex === state.activeHandIndex ? turnCountdownMs : undefined
-                                }
-                                countdownTotalMs={TURN_MS}
-                              />
-                            );
-                          })
-                        ) : skippedRound ? (
-                          <div className="seat-skipped">Round Skipped</div>
-                        ) : (
-                          <PlayerHandView
-                            hand={createEmptyHand(0)}
-                            label="Hand 1"
-                            isActive={false}
-                            showBet={false}
-                            showTotal={false}
-                          />
-                        )}
-                        {state.phase === "BETTING" && (
-                          <div className="seat-controls">
-                            <BetControls
-                              bet={bet}
-                              onBetChange={setBet}
-                              onDeal={handleDeal}
-                              canDeal={canDeal}
-                              countdownMs={dealCountdownMs ?? undefined}
-                              countdownTotalMs={AUTO_DEAL_MS}
+                  return (
+                    <div
+                      key={`seat-${seat.seatIndex}`}
+                      className={`player-spot ${isActiveSeat ? "active" : ""}`}
+                    >
+                      <div className="player-spot__title">Seat {seat.seatIndex + 1}</div>
+                      {seat.hands.length > 0 ? (
+                        seat.hands.map((hand, handIndex) => {
+                          const handResult = seatResultsByHand.find(
+                            (result) => result.handIndex === handIndex
+                          );
+                          const isActiveHand =
+                            state.phase === "PLAYER_TURN" &&
+                            seat.seatIndex === state.activeSeatIndex &&
+                            handIndex === seat.activeHandIndex;
+
+                          return (
+                            <PlayerHandView
+                              key={`hand-${seat.seatIndex}-${handIndex}`}
+                              hand={hand}
+                              label={`Hand ${handIndex + 1}`}
+                              isActive={isActiveHand}
+                              resultOutcome={handResult?.outcome}
+                              canHit={isActiveHand ? canHit : false}
+                              canDouble={isActiveHand ? canDouble : false}
+                              canSplit={isActiveHand ? canSplit : false}
+                              canStand={isActiveHand ? canStand : false}
+                              canSurrender={isActiveHand ? canSurrender : false}
+                              onHit={() => {
+                                resetTurnTimer();
+                                dispatch({ type: "HIT" });
+                              }}
+                              onDouble={() => {
+                                resetTurnTimer();
+                                dispatch({ type: "DOUBLE" });
+                              }}
+                              onSplit={() => {
+                                resetTurnTimer();
+                                dispatch({ type: "SPLIT" });
+                              }}
+                              onStand={() => dispatch({ type: "STAND" })}
+                              onSurrender={() => dispatch({ type: "SURRENDER" })}
+                              countdownMs={isActiveHand ? turnCountdownMs : undefined}
+                              countdownTotalMs={TURN_MS}
                             />
-                            {needsShuffle && (
-                              <button onClick={handleShuffle}>Shuffle Shoe</button>
-                            )}
-                          </div>
-                        )}
-                        {state.phase === "INSURANCE" && (
+                          );
+                        })
+                      ) : seat.skippedRound ? (
+                        <div className="seat-skipped">Round Skipped</div>
+                      ) : (
+                        <PlayerHandView
+                          hand={createEmptyHand(0)}
+                          label="Hand 1"
+                          isActive={false}
+                          showBet={false}
+                          showTotal={false}
+                        />
+                      )}
+
+                      {state.phase === "BETTING" && (
+                        <div className="seat-controls">
+                          <BetControls
+                            bet={seat.pendingBet}
+                            onBetChange={(amount) =>
+                              dispatch({ type: "SET_BET", seatIndex: seat.seatIndex, amount })
+                            }
+                            onDeal={() =>
+                              dispatch({
+                                type: "TOGGLE_READY",
+                                seatIndex: seat.seatIndex,
+                                ready: !seat.ready
+                              })
+                            }
+                            dealLabel={seat.ready ? "Ready ✓" : "Ready"}
+                            canDeal={
+                              seat.ready ||
+                              (seat.pendingBet > 0 && seat.pendingBet <= seat.bankroll)
+                            }
+                            countdownMs={dealCountdownMs ?? undefined}
+                            countdownTotalMs={AUTO_DEAL_MS}
+                          />
+                          {needsShuffle && seat.seatIndex === 0 && (
+                            <button onClick={handleShuffle}>Shuffle Shoe</button>
+                          )}
+                        </div>
+                      )}
+
+                      {state.phase === "INSURANCE" &&
+                        seat.seatIndex === state.activeSeatIndex &&
+                        seat.insuranceOffered && (
                           <div className="seat-controls">
                             <div>Dealer shows an Ace. Insurance?</div>
                             <div className="seat-controls__row">
@@ -493,23 +518,21 @@ export function Play() {
                             </div>
                           </div>
                         )}
-                        <div className="bankroll-strip">
-                          <div className="bankroll-item">Bankroll: {state.bankroll}</div>
-                          {state.insuranceBet > 0 && (
-                            <div className="bankroll-item">Insurance: {state.insuranceBet}</div>
-                          )}
-                        </div>
-                      </>
-                    ) : (
-                      <div>Empty</div>
-                    )}
-                  </div>
-                ))}
-                {seatCount < 7 && (
+
+                      <div className="bankroll-strip">
+                        <div className="bankroll-item">Bankroll: {seat.bankroll}</div>
+                        {seat.insuranceBet > 0 && (
+                          <div className="bankroll-item">Insurance: {seat.insuranceBet}</div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                {state.seats.length < 7 && state.phase === "BETTING" && (
                   <button
                     type="button"
                     className="player-spot player-spot--add"
-                    onClick={() => setSeatCount((prev) => Math.min(7, prev + 1))}
+                    onClick={() => dispatch({ type: "ADD_SEAT" })}
                   >
                     <div className="player-spot__title">Add seat</div>
                     <div className="player-spot__add">+</div>
@@ -518,10 +541,8 @@ export function Play() {
               </div>
             </div>
           </div>
-
         </div>
       </TableLayout>
-
     </section>
   );
 }
@@ -597,20 +618,20 @@ function PlayerHandView({
         </div>
       ) : (
         showActions && (
-        <div className="hand-actions">
-          <button className="stand-button" onClick={onStand} disabled={!canStand || !onStand}>
-            Stand
-            {showCountdown && (
-              <span className="stand-progress" style={{ width: `${countdownPercent}%` }} />
-            )}
-          </button>
-          <button onClick={onSurrender} disabled={!canSurrender || !onSurrender}>
-            Surrender
-          </button>
-          <button onClick={onSplit} disabled={!canSplit || !onSplit}>
-            Split
-          </button>
-        </div>
+          <div className="hand-actions">
+            <button className="stand-button" onClick={onStand} disabled={!canStand || !onStand}>
+              Stand
+              {showCountdown && (
+                <span className="stand-progress" style={{ width: `${countdownPercent}%` }} />
+              )}
+            </button>
+            <button onClick={onSurrender} disabled={!canSurrender || !onSurrender}>
+              Surrender
+            </button>
+            <button onClick={onSplit} disabled={!canSplit || !onSplit}>
+              Split
+            </button>
+          </div>
         )
       )}
     </div>
@@ -630,6 +651,7 @@ function getOutcomeClass(outcome?: string) {
   if (normalized.includes("PUSH")) return "hand-result--push";
   return "";
 }
+
 function getUpcardValue(rank?: string) {
   if (!rank) return null;
   if (rank === "A") return 11;
@@ -719,6 +741,7 @@ function getPerfectPlay(
   if (total === 9) return upcardValue >= 3 && upcardValue <= 6 && rules.allowDouble ? "Double" : "Hit";
   return "Hit";
 }
+
 function TableStat({ label, value }: TableStatProps) {
   return (
     <div className="table-stat">
