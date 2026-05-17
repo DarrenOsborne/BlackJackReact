@@ -38,10 +38,8 @@ export function BetControls({
   const showCountdown =
     typeof countdownMs === "number" &&
     typeof countdownTotalMs === "number" &&
-    countdownTotalMs > 0;
-  const countdownPercent = showCountdown
-    ? Math.max(0, Math.min(100, (countdownMs / countdownTotalMs) * 100))
-    : 0;
+    countdownTotalMs > 0 &&
+    countdownMs > 0;
 
   useEffect(() => {
     betRef.current = bet;
@@ -127,7 +125,7 @@ export function BetControls({
         >
           {dealLabel}
           {showCountdown && (
-            <span className="deal-progress" style={{ width: `${countdownPercent}%` }} />
+            <span className="deal-progress" style={{ animationDuration: `${countdownTotalMs}ms` }} />
           )}
         </button>
       )}

@@ -224,7 +224,7 @@ body {
   grid-template-columns: minmax(0, 1fr) minmax(180px, 0.6fr);
   gap: 12px;
   align-items: start;
-  min-height: 120px;
+  min-height: 180px;
 }
 
 .dealer-hand {
@@ -268,10 +268,11 @@ body {
   width: 100%;
   border-radius: 12px;
   border: 1px dashed #2d555c;
-  min-height: 180px;
+  min-height: 380px;
   background: rgba(7, 16, 18, 0.4);
   display: grid;
   gap: 8px;
+  align-content: start;
 }
 
 .player-spot.active {
@@ -371,6 +372,7 @@ body {
   font-weight: 700;
   font-size: 18px;
   gap: 0px;
+  flex-shrink: 0;
 }
 
 .card__rank {
@@ -403,6 +405,21 @@ body {
 .card--black .card__rank,
 .card--black .card__suit {
   color: #1a1a1a;
+}
+
+@keyframes card-deal {
+  0% {
+    opacity: 0;
+    transform: translate(200px, -200px) rotate(180deg) scale(0.5);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg) scale(1);
+  }
+}
+
+.card-deal-anim {
+  animation: card-deal 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.1) forwards;
 }
 
 .hand-actions {
@@ -473,6 +490,15 @@ body {
   overflow: hidden;
 }
 
+@keyframes timer-bar {
+  0% {
+    width: 100%;
+  }
+  100% {
+    width: 0%;
+  }
+}
+
 .bet-controls button.ready-button--on,
 .seat-controls button.ready-button--on {
   border-color: #4db07a !important;
@@ -495,6 +521,7 @@ body {
   background: var(--accent);
   opacity: 0.9;
   pointer-events: none;
+  animation: timer-bar linear forwards;
 }
 
 .stand-button {
@@ -510,6 +537,7 @@ body {
   background: var(--accent-2);
   opacity: 0.9;
   pointer-events: none;
+  animation: timer-bar linear forwards;
 }
 
 .status-strip {
@@ -798,6 +826,7 @@ body {
   display: flex;
   gap: 8px;
 }
+
 
 .live-count__settings {
   display: grid;

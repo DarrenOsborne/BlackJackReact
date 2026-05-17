@@ -13,6 +13,7 @@ import {
   reduce,
   type Hand as HandModel
 } from "../../game/engine";
+import { soundEngine } from "../../ui/utils/soundEngine";
 
 const randomSeed = () => Math.floor(Math.random() * 2 ** 32);
 const AUTO_DEAL_MS = 20000;
@@ -74,6 +75,14 @@ export function Play() {
     return () => window.clearTimeout(timerId);
   }, [state.phase, state.dealerHand.cards.length, dealerRevealPending, dealerNeedsHit]);
 
+  useEffect(() => {
+    if (state.phase !== "DEALING") return;
+    const timerId = window.setTimeout(() => {
+      dispatch({ type: "DEAL_STEP" });
+    }, 250); // Deal a card every 250ms
+    return () => window.clearTimeout(timerId);
+  }, [state.phase, state.dealQueue.length]);
+
   useLayoutEffect(() => {
     if (state.phase !== "BETTING" || !state.lastResult) {
       setPostRoundRevealPending(false);
@@ -119,21 +128,13 @@ export function Play() {
       return;
     }
 
-    let timerId: number;
-    const tick = () => {
-      const remaining = Math.max(0, insuranceDeadline - Date.now());
-      setInsuranceCountdownMs(remaining);
-      if (remaining <= 0) {
-        dispatch({ type: "DECLINE_INSURANCE" });
-        return;
-      }
-      timerId = window.setTimeout(tick, 120);
-    };
-
-    tick();
+    setInsuranceCountdownMs(INSURANCE_MS);
+    const timerId = window.setTimeout(() => {
+      dispatch({ type: "DECLINE_INSURANCE" });
+    }, Math.max(0, insuranceDeadline - Date.now()));
 
     return () => {
-      if (timerId) window.clearTimeout(timerId);
+      window.clearTimeout(timerId);
     };
   }, [insuranceDeadline]);
 
@@ -231,12 +232,14 @@ export function Play() {
   const handleDealNow = () => {
     if (!canDealRef.current) return;
     if (needsShuffle) {
+      soundEngine.playShuffle();
       dispatch({ type: "RESHUFFLE", seed: randomSeed() });
     }
-    dispatch({ type: "DEAL" });
+    dispatch({ type: "BEGIN_DEAL" });
   };
 
   const handleShuffle = () => {
+    soundEngine.playShuffle();
     dispatch({ type: "RESHUFFLE", seed: randomSeed() });
   };
 
@@ -250,21 +253,13 @@ export function Play() {
       return;
     }
 
-    let timerId: number;
-    const tick = () => {
-      const remaining = Math.max(0, turnDeadline - Date.now());
-      setTurnCountdownMs(remaining);
-      if (remaining <= 0) {
-        dispatch({ type: "STAND" });
-        return;
-      }
-      timerId = window.setTimeout(tick, 120);
-    };
-
-    tick();
+    setTurnCountdownMs(TURN_MS);
+    const timerId = window.setTimeout(() => {
+      dispatch({ type: "STAND" });
+    }, Math.max(0, turnDeadline - Date.now()));
 
     return () => {
-      if (timerId) window.clearTimeout(timerId);
+      window.clearTimeout(timerId);
     };
   }, [turnDeadline]);
 
@@ -283,41 +278,32 @@ export function Play() {
       dealStartRef.current = Date.now();
     }
 
-    let timerId: number;
-    const tick = () => {
-      const start = dealStartRef.current ?? Date.now();
-      const elapsed = Date.now() - start;
-      const remaining = Math.max(0, AUTO_DEAL_MS - elapsed);
-      setDealCountdownMs(remaining);
-      if (allSeatsReady) {
-        handleDealNow();
-        return;
-      }
-      if (remaining <= 0) {
-        if (canDealRef.current) {
-          handleDealNow();
-        } else {
-          dispatch({ type: "END_ROUND" });
-          setDealCountdownMs(0);
-          dealStartRef.current = null;
-          if (dealResetTimerRef.current) {
-            window.clearTimeout(dealResetTimerRef.current);
-          }
-          dealResetTimerRef.current = window.setTimeout(() => {
-            setDealCycle((prev) => prev + 1);
-          }, 5000);
-        }
-        return;
-      }
-      timerId = window.setTimeout(tick, 120);
-    };
+    if (allSeatsReady) {
+      handleDealNow();
+      return;
+    }
 
-    tick();
+    setDealCountdownMs(AUTO_DEAL_MS);
+    const remaining = Math.max(0, AUTO_DEAL_MS - (Date.now() - dealStartRef.current));
+
+    const timerId = window.setTimeout(() => {
+      if (canDealRef.current) {
+        handleDealNow();
+      } else {
+        dispatch({ type: "END_ROUND" });
+        setDealCountdownMs(0);
+        dealStartRef.current = null;
+        if (dealResetTimerRef.current) {
+          window.clearTimeout(dealResetTimerRef.current);
+        }
+        dealResetTimerRef.current = window.setTimeout(() => {
+          setDealCycle((prev) => prev + 1);
+        }, 5000);
+      }
+    }, remaining);
 
     return () => {
-      if (timerId) {
-        window.clearTimeout(timerId);
-      }
+      window.clearTimeout(timerId);
     };
   }, [state.phase, dealCycle, allSeatsReady]);
 
@@ -518,10 +504,7 @@ export function Play() {
                                   <span
                                     className="stand-progress"
                                     style={{
-                                      width: `${Math.max(
-                                        0,
-                                        Math.min(100, (insuranceCountdownMs / INSURANCE_MS) * 100)
-                                      )}%`
+                                      animationDuration: `${INSURANCE_MS}ms`
                                     }}
                                   />
                                 )}
@@ -604,10 +587,8 @@ function PlayerHandView({
   const showCountdown =
     typeof countdownMs === "number" &&
     typeof countdownTotalMs === "number" &&
-    countdownTotalMs > 0;
-  const countdownPercent = showCountdown
-    ? Math.max(0, Math.min(100, (countdownMs / countdownTotalMs) * 100))
-    : 0;
+    countdownTotalMs > 0 &&
+    countdownMs > 0;
   const actionSlot = showActions ? (
     <HandActionSlot onHit={onHit} onDouble={onDouble} canHit={canHit} canDouble={canDouble} />
   ) : undefined;
@@ -633,7 +614,7 @@ function PlayerHandView({
             <button className="stand-button" onClick={onStand} disabled={!canStand || !onStand}>
               Stand
               {showCountdown && (
-                <span className="stand-progress" style={{ width: `${countdownPercent}%` }} />
+                <span className="stand-progress" style={{ animationDuration: `${countdownTotalMs}ms` }} />
               )}
             </button>
             <button onClick={onSurrender} disabled={!canSurrender || !onSurrender}>
