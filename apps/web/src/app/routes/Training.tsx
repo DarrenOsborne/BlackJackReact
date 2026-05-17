@@ -4,6 +4,7 @@ import { Hand } from "../../ui/components/Cards/Hand";
 import type { Card as CardModel, Hand as HandModel, Rank, Suit } from "../../game/engine/model/types";
 import { updateRunningCount } from "../../game/engine/counting/hiLo";
 import { createInitialState, DEFAULT_RULES, evaluateHand, reduce } from "../../game/engine";
+import { getPerfectPlay } from "../../game/engine/model/strategy";
 
 type RangeOption = {
   label: string;
@@ -65,7 +66,7 @@ function randomCard(): CardModel {
 }
 
 export function Training() {
-  const [active, setActive] = useState<"list" | "spam" | "live">("list");
+  const [active, setActive] = useState<"list" | "spam" | "live" | "strategy">("list");
 
   return (
     <section className="page training-page">
@@ -84,11 +85,19 @@ export function Training() {
               Track the count while a perfect player and dealer run rounds.
             </div>
           </button>
+          <button className="training-card" onClick={() => setActive("strategy")}>
+            <div className="training-card__title">Basic Strategy</div>
+            <div className="training-card__desc">
+              Flashcards to test your basic strategy decisions.
+            </div>
+          </button>
         </div>
       ) : active === "spam" ? (
         <SpamCount onBack={() => setActive("list")} />
-      ) : (
+      ) : active === "live" ? (
         <LiveCount onBack={() => setActive("list")} />
+      ) : (
+        <BasicStrategy onBack={() => setActive("list")} />
       )}
     </section>
   );
@@ -602,92 +611,164 @@ function LiveCount({ onBack }: LiveCountProps) {
   );
 }
 
-function getUpcardValue(rank?: string) {
-  if (!rank) return null;
-  if (rank === "A") return 11;
-  if (rank === "K" || rank === "Q" || rank === "J" || rank === "10") return 10;
-  const value = Number(rank);
-  return Number.isFinite(value) ? value : null;
-}
+// --- BASIC STRATEGY TRAINER ---
 
-function shouldSplitPair(rank: string, upcard: number, dasAllowed: boolean) {
-  if (rank === "A") return true;
-  if (rank === "10" || rank === "K" || rank === "Q" || rank === "J") return false;
-  switch (rank) {
-    case "9":
-      return [2, 3, 4, 5, 6, 8, 9].includes(upcard);
-    case "8":
-      return true;
-    case "7":
-      return upcard >= 2 && upcard <= 7;
-    case "6":
-      return upcard >= 3 && upcard <= 6 || (upcard === 2 && dasAllowed);
-    case "5":
-      return false;
-    case "4":
-      return (upcard === 5 || upcard === 6) && dasAllowed;
-    case "3":
-    case "2":
-      return upcard >= 4 && upcard <= 7 || ((upcard === 2 || upcard === 3) && dasAllowed);
-    default:
-      return false;
-  }
-}
+type BasicStrategyProps = {
+  onBack: () => void;
+};
 
-function getPerfectPlay(
-  hand: HandModel | undefined,
-  dealerUpcard: { rank: string } | undefined,
-  rules: { allowDouble: boolean; allowSurrender: boolean; allowDoubleAfterSplit: boolean },
-  canSplit: boolean
-) {
-  if (!hand || !dealerUpcard) return "-";
-  const upcardValue = getUpcardValue(dealerUpcard.rank);
-  if (!upcardValue) return "-";
+type Scenario = {
+  playerHand: HandModel;
+  dealerUpcard: CardModel;
+};
 
-  const isPair = hand.cards.length === 2 && hand.cards[0].rank === hand.cards[1].rank;
-  const isSoft = evaluateHand(hand.cards).isSoft;
-  const total = evaluateHand(hand.cards).total;
+export function BasicStrategy({ onBack }: BasicStrategyProps) {
+  const [streak, setStreak] = useState(0);
+  const [correctCount, setCorrectCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
+  const [scenario, setScenario] = useState<Scenario | null>(null);
+  const [feedbackState, setFeedbackState] = useState<{ isCorrect: boolean; message: string } | null>(null);
+  const [filters, setFilters] = useState({ hard: true, soft: true, pair: true });
 
-  if (canSplit && isPair && shouldSplitPair(hand.cards[0].rank, upcardValue, rules.allowDoubleAfterSplit)) {
-    return "Split";
-  }
+  const toggleFilter = (key: keyof typeof filters) => {
+    setFilters((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      // Ensure at least one filter is active
+      if (!next.hard && !next.soft && !next.pair) return prev;
+      return next;
+    });
+  };
 
-  if (rules.allowSurrender && hand.cards.length === 2) {
-    if (total === 16 && (upcardValue === 9 || upcardValue === 10 || upcardValue === 11)) {
-      return "Surrender";
+  const generateScenario = () => {
+    const activeFilters = Object.keys(filters).filter((k) => filters[k as keyof typeof filters]);
+    const chosenFilter = activeFilters[Math.floor(Math.random() * activeFilters.length)];
+
+    let c1 = randomCard();
+    let c2 = randomCard();
+
+    if (chosenFilter === "pair") {
+      c2 = { ...randomCard(), rank: c1.rank };
+    } else if (chosenFilter === "soft") {
+      c1 = { ...randomCard(), rank: "A" };
+      while (c2.rank === "A") c2 = randomCard(); // Avoid A,A which is a pair
+    } else {
+      // Hard hand (no aces, no pairs)
+      while (c1.rank === "A" || c2.rank === "A" || c1.rank === c2.rank) {
+        c1 = randomCard();
+        c2 = randomCard();
+      }
     }
-    if (total === 15 && upcardValue === 10) {
-      return "Surrender";
-    }
-  }
 
-  if (isSoft) {
-    if (total >= 20) return "Stand";
-    if (total === 19) return "Stand";
-    if (total === 18) {
-      if (upcardValue >= 3 && upcardValue <= 6) return rules.allowDouble ? "Double" : "Stand";
-      if (upcardValue === 2 || upcardValue === 7 || upcardValue === 8) return "Stand";
-      return "Hit";
-    }
-    if (total === 17) {
-      if (upcardValue >= 3 && upcardValue <= 6) return rules.allowDouble ? "Double" : "Hit";
-      return "Hit";
-    }
-    if (total === 16 || total === 15) {
-      if (upcardValue >= 4 && upcardValue <= 6) return rules.allowDouble ? "Double" : "Hit";
-      return "Hit";
-    }
-    if (total === 14 || total === 13) {
-      if (upcardValue === 5 || upcardValue === 6) return rules.allowDouble ? "Double" : "Hit";
-      return "Hit";
-    }
-  }
+    setScenario({
+      playerHand: {
+        cards: [c1, c2],
+        bet: 10,
+        status: "ACTIVE",
+        isSplitChild: false,
+        splitFromAce: false
+      },
+      dealerUpcard: randomCard()
+    });
+    setFeedbackState(null);
+  };
 
-  if (total >= 17) return "Stand";
-  if (total >= 13 && total <= 16) return upcardValue >= 2 && upcardValue <= 6 ? "Stand" : "Hit";
-  if (total === 12) return upcardValue >= 4 && upcardValue <= 6 ? "Stand" : "Hit";
-  if (total === 11) return upcardValue <= 10 && rules.allowDouble ? "Double" : "Hit";
-  if (total === 10) return upcardValue >= 2 && upcardValue <= 9 && rules.allowDouble ? "Double" : "Hit";
-  if (total === 9) return upcardValue >= 3 && upcardValue <= 6 && rules.allowDouble ? "Double" : "Hit";
-  return "Hit";
+  // Initialize first scenario
+  useEffect(() => {
+    if (!scenario && !feedbackState) {
+      generateScenario();
+    }
+  }, [scenario, feedbackState, filters]); // added filters to regenerate if needed but usually driven by user action
+
+  const handleAction = (action: string) => {
+    if (!scenario || feedbackState) return;
+    
+    // Evaluate perfect play
+    const canSplit = scenario.playerHand.cards[0].rank === scenario.playerHand.cards[1].rank;
+    const correctPlay = getPerfectPlay(scenario.playerHand, scenario.dealerUpcard, DEFAULT_RULES, canSplit);
+    
+    const isCorrect = action === correctPlay;
+
+    setTotalCount((prev) => prev + 1);
+    if (isCorrect) {
+      setStreak((prev) => prev + 1);
+      setCorrectCount((prev) => prev + 1);
+      setFeedbackState({ isCorrect: true, message: "Correct!" });
+      setTimeout(() => generateScenario(), 600);
+    } else {
+      setStreak(0);
+      setFeedbackState({ isCorrect: false, message: `Incorrect. The correct play is ${correctPlay}` });
+      setTimeout(() => generateScenario(), 2000);
+    }
+  };
+
+  return (
+    <div className="strategy-trainer">
+      <div className="live-count__header" style={{ marginBottom: "16px" }}>
+        <div>
+          <div className="live-count__title">Basic Strategy</div>
+        </div>
+        <div className="live-count__actions">
+          <button onClick={onBack}>Back</button>
+        </div>
+      </div>
+
+      <div className="live-count__settings glass-panel" style={{ padding: "16px", borderRadius: "12px", marginBottom: "24px" }}>
+        <div className="live-count__setting">
+          <div className="live-count__label">Hand Types</div>
+          <div className="live-count__options">
+            <button className={filters.hard ? "active" : ""} onClick={() => toggleFilter("hard")}>Hard</button>
+            <button className={filters.soft ? "active" : ""} onClick={() => toggleFilter("soft")}>Soft</button>
+            <button className={filters.pair ? "active" : ""} onClick={() => toggleFilter("pair")}>Pairs</button>
+          </div>
+        </div>
+        <div style={{ marginTop: "12px", fontSize: "14px", display: "flex", gap: "16px" }}>
+          <div>Streak: <span style={{ color: "var(--accent)", fontWeight: "bold" }}>{streak}</span></div>
+          <div>Accuracy: {totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 0}%</div>
+        </div>
+      </div>
+
+      <div className="table-layout" style={{ minHeight: "400px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "32px" }}>
+        {scenario && (
+          <>
+            <div className="dealer-area" style={{ width: "100%", maxWidth: "400px", textAlign: "center" }}>
+              <h2 style={{ marginBottom: "12px" }}>Dealer</h2>
+              <div style={{ display: "flex", justifyContent: "center", gap: "8px" }}>
+                <Card card={scenario.dealerUpcard} />
+                <Card card={scenario.dealerUpcard} faceDown={true} />
+              </div>
+            </div>
+
+            <div className="player-area" style={{ width: "100%", maxWidth: "400px", textAlign: "center" }}>
+              <h2 style={{ marginBottom: "12px" }}>Player ({evaluateHand(scenario.playerHand.cards).total})</h2>
+              <div style={{ display: "flex", justifyContent: "center" }}>
+                <Hand cards={scenario.playerHand.cards} showTotal={false} />
+              </div>
+
+              {feedbackState && (
+                <div style={{ 
+                  marginTop: "16px", 
+                  padding: "12px", 
+                  borderRadius: "8px", 
+                  background: feedbackState.isCorrect ? "rgba(46, 139, 87, 0.2)" : "rgba(166, 44, 43, 0.2)",
+                  color: feedbackState.isCorrect ? "#7cc7b1" : "#e46b6b",
+                  border: `1px solid ${feedbackState.isCorrect ? "#7cc7b1" : "#e46b6b"}`,
+                  fontWeight: "bold"
+                }}>
+                  {feedbackState.message}
+                </div>
+              )}
+
+              <div style={{ display: "flex", justifyContent: "center", gap: "8px", marginTop: "24px", flexWrap: "wrap" }}>
+                <button className="action-btn" onClick={() => handleAction("Hit")} disabled={!!feedbackState}>Hit</button>
+                <button className="action-btn" onClick={() => handleAction("Stand")} disabled={!!feedbackState}>Stand</button>
+                <button className="action-btn" onClick={() => handleAction("Double")} disabled={!!feedbackState}>Double</button>
+                <button className="action-btn" onClick={() => handleAction("Split")} disabled={!!feedbackState || scenario.playerHand.cards[0].rank !== scenario.playerHand.cards[1].rank}>Split</button>
+                <button className="action-btn" onClick={() => handleAction("Surrender")} disabled={!!feedbackState}>Surrender</button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
 }
