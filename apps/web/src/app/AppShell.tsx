@@ -1,12 +1,12 @@
-﻿import { BrowserRouter, NavLink } from "react-router-dom";
+import { BrowserRouter, NavLink } from "react-router-dom";
 import { AppRoutes } from "./router";
 
 export function AppShell() {
   return (
     <BrowserRouter>
       <div className="app-shell">
-        <header className="app-header">
-          <div className="brand">BlackJackReact</div>
+        <header className="app-header glass-panel" style={{ background: "transparent", borderTop: "none", borderLeft: "none", borderRight: "none", borderRadius: 0 }}>
+          <div className="brand" style={{ color: "var(--accent)" }}>BlackJackReact</div>
           <nav className="app-nav">
             <NavLink to="/">Home</NavLink>
             <NavLink to="/play">Play</NavLink>

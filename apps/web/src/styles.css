@@ -1,19 +1,27 @@
 :root {
-  color-scheme: light;
-  --bg-deep: #0a1316;
-  --bg-mid: #102226;
-  --bg-light: #18353b;
-  --felt: #0f3a2f;
-  --felt-dark: #0b2a23;
-  --ink: #f6f5f0;
-  --accent: #d6b15d;
-  --accent-2: #7cc7b1;
-  --border: #24454b;
-  --card-width: 48px;
-  --card-height: 64px;
-  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  color-scheme: dark;
+  --bg-deep: #0B0E14;
+  --bg-mid: #151A22;
+  --bg-light: #1E2532;
+  --felt: #0B3D2E;
+  --felt-dark: #07261C;
+  --ink: #F8F9FA;
+  --accent: #D4AF37;
+  --accent-2: #2E8B57;
+  --border: #2C3545;
+  --card-width: 56px;
+  --card-height: 78px;
+  font-family: 'Outfit', sans-serif;
   color: var(--ink);
-  background: radial-gradient(circle at top, #19363d 0%, #0b1518 52%, #080f11 100%);
+  background: radial-gradient(circle at 50% 0%, var(--bg-mid) 0%, var(--bg-deep) 100%);
+}
+
+.glass-panel {
+  background: rgba(21, 26, 34, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
 }
 
 * {
@@ -94,10 +102,11 @@ body {
 
 .table-layout {
   position: relative;
-  padding: 20px;
-  border-radius: 18px;
-  border: 1px solid #1f4248;
-  background: radial-gradient(circle at 10% 20%, #163a35 0%, #0e2624 55%, #0a1d1f 100%);
+  padding: 24px;
+  border-radius: 24px;
+  border: 1px solid rgba(44, 53, 69, 0.8);
+  background: radial-gradient(ellipse at center, var(--felt) 0%, var(--felt-dark) 100%);
+  box-shadow: inset 0 0 100px rgba(0,0,0,0.5), 0 16px 40px rgba(0,0,0,0.4);
   overflow: hidden;
 }
 
@@ -373,6 +382,13 @@ body {
   font-size: 18px;
   gap: 0px;
   flex-shrink: 0;
+  box-shadow: 2px 4px 10px rgba(0,0,0,0.5);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 4px 8px 15px rgba(0,0,0,0.6);
 }
 
 .card__rank {
@@ -387,14 +403,19 @@ body {
 }
 
 .card--down {
-  background: repeating-linear-gradient(
-    45deg,
-    #2c3c45,
-    #2c3c45 6px,
-    #22323b 6px,
-    #22323b 12px
-  );
-  border-color: #1a2a31;
+  background: radial-gradient(circle at center, #A62C2B 0%, #7A1D1C 100%);
+  border: 2px solid #F2E8C6;
+  position: relative;
+}
+
+.card--down::after {
+  content: "♠";
+  position: absolute;
+  font-size: 24px;
+  color: rgba(242, 232, 198, 0.4);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
 }
 
 .card--red .card__rank,
@@ -987,4 +1008,31 @@ body {
 .seat-controls button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .app-header {
+    flex-direction: column;
+    gap: 16px;
+    padding: 12px;
+  }
+  .app-nav {
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+  .dealer-row {
+    grid-template-columns: 1fr;
+  }
+  .dealer-content {
+    grid-template-columns: 1fr;
+  }
+  .player-spots {
+    grid-template-columns: 1fr;
+  }
+  .table-stat, .shoe-visual, .discard-tray {
+    min-width: unset;
+    flex: 1 1 30%;
+  }
 }

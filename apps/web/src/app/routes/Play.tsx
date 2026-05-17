@@ -589,9 +589,6 @@ function PlayerHandView({
     typeof countdownTotalMs === "number" &&
     countdownTotalMs > 0 &&
     countdownMs > 0;
-  const actionSlot = showActions ? (
-    <HandActionSlot onHit={onHit} onDouble={onDouble} canHit={canHit} canDouble={canDouble} />
-  ) : undefined;
 
   return (
     <div className={isActive ? "player-hand player-hand--active" : "player-hand"}>
@@ -600,7 +597,6 @@ function PlayerHandView({
         label={label}
         status={hand.status}
         showTotal={showTotal}
-        actionSlot={actionSlot}
       />
       {showBet && <div>Bet: {hand.bet}</div>}
       {isActive && !showResult && <div>Active</div>}
@@ -610,18 +606,24 @@ function PlayerHandView({
         </div>
       ) : (
         showActions && (
-          <div className="hand-actions">
-            <button className="stand-button" onClick={onStand} disabled={!canStand || !onStand}>
+          <div className="hand-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
+            <button onClick={onHit} disabled={!canHit || !onHit} className="action-btn">
+              Hit
+            </button>
+            <button className="stand-button action-btn" onClick={onStand} disabled={!canStand || !onStand}>
               Stand
               {showCountdown && (
                 <span className="stand-progress" style={{ animationDuration: `${countdownTotalMs}ms` }} />
               )}
             </button>
-            <button onClick={onSurrender} disabled={!canSurrender || !onSurrender}>
-              Surrender
+            <button onClick={onDouble} disabled={!canDouble || !onDouble} className="action-btn">
+              Double
             </button>
-            <button onClick={onSplit} disabled={!canSplit || !onSplit}>
+            <button onClick={onSplit} disabled={!canSplit || !onSplit} className="action-btn">
               Split
+            </button>
+            <button onClick={onSurrender} disabled={!canSurrender || !onSurrender} className="action-btn">
+              Surrender
             </button>
           </div>
         )
@@ -736,29 +738,9 @@ function getPerfectPlay(
 
 function TableStat({ label, value }: TableStatProps) {
   return (
-    <div className="table-stat">
+    <div className="table-stat glass-panel">
       <div className="table-stat__title">{label}</div>
       <div className="table-stat__value">{value}</div>
-    </div>
-  );
-}
-
-type HandActionSlotProps = {
-  onHit?: () => void;
-  onDouble?: () => void;
-  canHit?: boolean;
-  canDouble?: boolean;
-};
-
-function HandActionSlot({ onHit, onDouble, canHit = false, canDouble = false }: HandActionSlotProps) {
-  return (
-    <div className="action-card">
-      <button onClick={onHit} disabled={!canHit || !onHit}>
-        Hit
-      </button>
-      <button onClick={onDouble} disabled={!canDouble || !onDouble}>
-        Double
-      </button>
     </div>
   );
 }

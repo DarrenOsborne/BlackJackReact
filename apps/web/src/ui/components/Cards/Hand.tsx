@@ -1,4 +1,4 @@
-﻿import type { ReactNode } from "react";
+import type { ReactNode } from "react";
 import type { Card as CardModel, HandStatus } from "../../../game/engine/model/types";
 import { evaluateHand } from "../../../game/engine/model/handValue";
 import { Card } from "./Card";
@@ -9,7 +9,6 @@ type HandProps = {
   hideFirstCard?: boolean;
   showTotal?: boolean;
   status?: HandStatus;
-  actionSlot?: ReactNode;
 };
 
 export function Hand({
@@ -17,8 +16,7 @@ export function Hand({
   label,
   hideFirstCard = false,
   showTotal = true,
-  status,
-  actionSlot
+  status
 }: HandProps) {
   const value = evaluateHand(cards);
   const totalLabel = hideFirstCard ? "?" : value.total.toString();
@@ -36,7 +34,6 @@ export function Hand({
             faceDown={hideFirstCard && index === 1}
           />
         ))}
-        {actionSlot}
       </div>
       {showTotal && <div className="hand__total">Total: {totalLabel}</div>}
       <div className="hand__status">{statusLabel}</div>
